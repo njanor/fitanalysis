@@ -11,8 +11,11 @@ import (
 	"github.com/tormoder/fit"
 )
 
+const stats = "stats"
+
 func main() {
-	fileName := flag.String("file", "", "The FIT file to analyze")
+	fileName := flag.String("file", "", "The FIT file containing the activity to analyse")
+	analysis := flag.String("analysis", stats, fmt.Sprintf("The analysis to perform. Options are: %s", stats))
 	flag.Parse()
 
 	if *fileName == "" {
@@ -24,6 +27,14 @@ func main() {
 	fit, _ := fit.Decode(bytes.NewReader(fitFile))
 	activity, _ := fit.Activity()
 
+	switch *analysis {
+	case stats:
+		analyseStats(activity)
+	}
+
+}
+
+func analyseStats(activity *fit.ActivityFile) {
 	duration, _ := time.ParseDuration(fmt.Sprintf("%dms", activity.Activity.TotalTimerTime))
 
 	fmt.Println(duration)
