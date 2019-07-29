@@ -26,9 +26,15 @@ var avgWatts = analysisOption{
 	Description: "Calculate average wattage for entire workout as well as for individual laps",
 }
 
+var peaks = analysisOption{
+	Name:        "peaks",
+	Description: fmt.Sprintf("Calculate peak average wattage over a specified interval. This flag requires the flag peakTime"),
+}
+
 func main() {
 	fileName := flag.String("file", "", "The FIT file containing the activity to analyse")
-	analysis := flag.String("analysis", stats.Name, fmt.Sprintf("The analysis to perform. Options are:\n\t%s - %s\n\t%s - %s", stats.Name, stats.Description, avgWatts.Name, avgWatts.Description))
+	analysis := flag.String("analysis", stats.Name, fmt.Sprintf("The analysis to perform. Options are:\n\t%s - %s\n\t%s - %s\n\t%s - %s", stats.Name, stats.Description, avgWatts.Name, avgWatts.Description, peaks.Name, peaks.Description))
+	peakTime := flag.Uint("peakTime", 1200, "The timeframe to find the peak value for, in seconds")
 	flag.Parse()
 
 	if *fileName == "" {
@@ -45,6 +51,8 @@ func main() {
 		analyseStats(activity)
 	case avgWatts.Name:
 		analyseAvgWatts(activity)
+	case peaks.Name:
+		analysePeakWattage(activity, *peakTime)
 	}
 }
 
@@ -67,24 +75,16 @@ func analyseStats(activity *fit.ActivityFile) {
 	fmt.Println(totalDistance)
 }
 
-func analyseAvgWatts(activity *fit.ActivityFile) {
-	averageWattsForInterval(activity.Records)
-	var totalAveragePower uint
-	for lapNumber, lap := range activity.Laps {
-		fmt.Println(lap.TotalElapsedTime)
-		totalAveragePower += uint(lap.AvgPower) * uint(lap.TotalElapsedTime/1000)
-		fmt.Println(lapNumber)
-		fmt.Println(lap.AvgPower)
-	}
-	fmt.Println(totalAveragePower / uint(activity.Activity.GetTotalTimerTimeScaled()))
+func analysePeakWattage(activity *fit.ActivityFile, peakTimeInSeconds uint) {
+	allWattagesPerSecond := getAverageWattsPerSecond(activity.Records)
+	printPeakWattageForInterval(allWattagesPerSecond, peakTimeInSeconds)
 }
 
-func averageWattsForInterval(records []*fit.RecordMsg) {
+func getAverageWattsPerSecond(records []*fit.RecordMsg) []uint16 {
 	duration := records[len(records)-1].Timestamp.Sub(records[0].Timestamp)
 	numberOfSeconds := uint(duration.Seconds())
 
 	allWattagesPerSecond := make([]uint16, numberOfSeconds)
-	var totalWatts uint
 
 	for i := 0; i < len(records)-1; i++ {
 		firstRecord := records[i]
@@ -95,19 +95,32 @@ func averageWattsForInterval(records []*fit.RecordMsg) {
 		averageWatts := (firstRecord.Power + secondRecord.Power) / 2
 		for j := 0; j < numberOfSecondsCalculated; j++ {
 			allWattagesPerSecond[i+j] = averageWatts
-			totalWatts += uint(averageWatts)
 		}
 	}
 
-	fmt.Println(totalWatts / numberOfSeconds)
+	return allWattagesPerSecond
+}
 
-	if numberOfSeconds >= 1200 {
-		averageWattageOver20Minutes := make([]uint16, numberOfSeconds-1200+1)
+func analyseAvgWatts(activity *fit.ActivityFile) {
+	var totalAveragePower uint
+	for lapNumber, lap := range activity.Laps {
+		fmt.Println(lap.TotalElapsedTime)
+		totalAveragePower += uint(lap.AvgPower) * uint(lap.TotalElapsedTime/1000)
+		fmt.Println(lapNumber)
+		fmt.Println(lap.AvgPower)
+	}
+	fmt.Println(totalAveragePower / uint(activity.Activity.GetTotalTimerTimeScaled()))
+}
+
+func printPeakWattageForInterval(wattsPerSecond []uint16, numberOfSeconds uint) {
+	lengthOfActivity := uint(len(wattsPerSecond))
+	if lengthOfActivity >= numberOfSeconds {
+		averageWattageOverInterval := make([]uint16, lengthOfActivity-numberOfSeconds+1)
 		var highestAverageWattage uint16
-		for i := uint(0); i < numberOfSeconds-uint(1200); i++ {
-			averageWattageOver20Minutes[i] = sumWattagesOverInterval(allWattagesPerSecond[i : int(i)+1200])
-			if averageWattageOver20Minutes[i] > highestAverageWattage {
-				highestAverageWattage = averageWattageOver20Minutes[i]
+		for i := uint(0); i < lengthOfActivity-numberOfSeconds; i++ {
+			averageWattageOverInterval[i] = sumWattagesOverInterval(wattsPerSecond[i:int(i+numberOfSeconds)])
+			if averageWattageOverInterval[i] > highestAverageWattage {
+				highestAverageWattage = averageWattageOverInterval[i]
 			}
 		}
 
