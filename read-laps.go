@@ -2,17 +2,25 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"time"
 
 	"github.com/tormoder/fit"
-
-	"time"
 )
 
 func main() {
-	fmt.Println("Hello world")
-	fitFile, _ := ioutil.ReadFile("2019-07-27.EnduranceRide.fit")
+	fileName := flag.String("file", "", "The FIT file to analyze")
+	flag.Parse()
+
+	if *fileName == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	fitFile, _ := ioutil.ReadFile(*fileName)
 	fit, _ := fit.Decode(bytes.NewReader(fitFile))
 	activity, _ := fit.Activity()
 
